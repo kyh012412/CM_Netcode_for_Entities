@@ -1,0 +1,23 @@
+[*.cs]
+csharp_new_line_before_open_brace = none
+csharp_new_line_before_else = false
+csharp_new_line_before_catch = false
+csharp_new_line_before_finally = false
+# csharp_new_line_before_members_in_object_initializers = false
+# csharp_new_line_before_members_in_anonymous_types = false
+# csharp_new_line_between_query_expression_clauses = false
+
+
+# 들여쓰기 설정
+indent_style = space
+indent_size = 4
+
+# 중괄호 스타일
+csharp_new_line_before_open_brace = none
+csharp_new_line_before_else = false
+csharp_new_line_before_catch = false
+csharp_new_line_before_finally = false
+
+# 공백 및 줄 끝 설정
+trim_trailing_whitespace = true
+insert_final_newline = true
