@@ -29,7 +29,7 @@
 5. 다시 테스트 Entities Hierarchy에서 NetworkId를 가진 객체를 볼 수 있다.
 6. 모든 ClientRpc는 서버에 Rpc를 보낼수있으며, 서버는 모든 또는 일부분의 클라이언트에게 Rpc를 보낼 수 있다.
 7. SimpleRpc 를 만들어준다.
-   1. MonobeHaviour를 지워주고 IRpcCommand로 바꿔준다.(Unity.Netcode 에 있는)
+   1. MonoBeHaviour를 지워주고 IRpcCommand로 바꿔준다.(Unity.Netcode 에 있는)
    2. ```cs
       public struct SimpleRpc : IRpcCommand {
       	// class가 아닌 struct에 주의할 것
@@ -89,7 +89,8 @@
    			Entity entity)
    			in SystemAPI.Query<
    				RefRO<SimpleRpc>,
-   				RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess()) {            Debug.Log("Received Rpc: " + simpleRpc.ValueRO.value + " :: " + ReceiveRpcCommandRequest.ValueRO.SourceConnection);
+   				RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess()) {
+   				Debug.Log("Received Rpc: " + simpleRpc.ValueRO.value + " :: " + ReceiveRpcCommandRequest.ValueRO.SourceConnection);
    			entityCommandBuffer.DestroyEntity(entity);
    		}
    		entityCommandBuffer.Playback(state.EntityManager);
@@ -98,3 +99,103 @@
    ```
 
 5. Entities Hierarchy에서 필터에 Entity Index로 특정 엔티티를 빠르게 검색할 수 있다.
+
+### Client Build and PlayMode Tools
+
+1. 유니티 에디터 > Edit > Project Settings > Multiplayer > Build
+   1. 여기에서 빌드에 대해 정의할 수있다.
+   2. 빌드한 것은 클라이언트만 되도록 설정하고
+   3. 에디터에서 client and server로 할 예정이다.
+   4. Netcode Client Target을 Client로 변경
+2. 유니티 에디터 > Edit > Project Settings > Player > Resolution Fullscreen Mode > Windowed
+3. 끝났다면 File > Build and Run을 눌러본다.
+4. 에디터에서 서버를 먼저 작동시켜주고 빌드물을 실행시켜서 T를눌러 상호작용 테스트를 해본다.
+
+### Setup Connection as InGame
+
+1. Windows > Multiplayer > PlayMode Tools
+   1. 여기서 많은 설정을 할 수 있다.
+2. Edit > Project Settings > Multiplayer > Build 에서 값을
+   1. client and server로 바꾸면 PlayMode Tools내에서 Server Emulation이라는 옵션이 생긴다.
+   2. 기존대로 build은 client로 쓰고
+   3. 에디터를 client and server로 사용
+3. 에디터를 키고 빌드물을 켜보면
+4. 엔티티 하이라키에서 > 서버월드에서 any=NetworkId를 검색해보면
+   1. 2개의 NetworkConnection이 생긴것을 볼 수 있다.
+5. 빌드를 통한 연결이 잘 되는 것을 확인했지만 빌드를 하는것은 시간이 걸리는 일이다.
+6. 유니티에있는 멀티플레이 모드라는것을 사용
+   1. 이것을 사용하여 빠른 테스트 가능
+7. 패키지매니저로가서 Multiplayer Play Mode 설치
+   1. 설치했다면 Windows > Multiplayer > Multiplayer Playe Mode가 있을것
+   2. Player 2를 체크하고 조금 기다릴것
+   3. Play를해서 Player2를 켜준다음에 우상단에 Layout에서 Playmode tools를 열어주고
+   4. PlayMode type을 client로 변경해준뒤 에디터에서 다시 PlayMode에 진입
+   5. 정상작동이되고 각자 T를 눌러서 상호작용이 되는지 확인한다.
+8. 지금은 데이터가 동기화가 된것은 아니고 단순히 rpc를 보낼 뿐이다.
+9. any=NetworkStreamConnection를 검색하여서 인스펙터 runtime을보면
+   1. NetworkSnapshot Ack를 보면 모든게 정적인값이고 바뀌지않는다.
+10. Client Connects Marks Connection to Server as InGame
+11. Client sends InGameRequestRpc to Server
+12. Server receives Rpc Marks Connection to Client as InGame
+13. GoInGameClientSystem 을 만들어준다.
+
+    1. 다음이 잘 되는 지 확인하고 Server단을 만들어준다.
+
+    ```cs
+    [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
+
+    partial struct GoInGameClientSystem : ISystem {
+        // [BurstCompile]
+        // 빠른 컴파일을 위해서 BurstCompile을 비활성화 최종단계에서 활성화하면됨
+        public void OnUpdate(ref SystemState state) {
+            EntityCommandBuffer entityCommandBuffer = new EntityCommandBuffer(Unity.Collections.Allocator.Temp);
+            foreach ((
+                RefRO<NetworkId> NetworkId,
+                Entity entity)
+                in SystemAPI.Query<
+                    RefRO<NetworkId>>().WithNone<NetworkStreamInGame>().WithEntityAccess()) { // 네트워크 아이디가 있지만 네트워크스트림인게임이 없는 엔티티조회
+                entityCommandBuffer.AddComponent<NetworkStreamInGame>(entity);
+                Entity rpcEntity = entityCommandBuffer.CreateEntity();
+                entityCommandBuffer.AddComponent(rpcEntity, new GoInGameRequestRpc());
+                entityCommandBuffer.AddComponent(rpcEntity, new SendRpcCommandRequest());
+            }
+            entityCommandBuffer.Playback(state.EntityManager);
+        }
+    }
+
+    public struct GoInGameRequestRpc : IRpcCommand {
+
+    }
+    ```
+
+```cs
+[WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
+partial struct GoInGameServerSystem : ISystem {
+    // [BurstCompile]
+    // 빠른 iteration을 위해서 게임 제작중에는 BurstCompile을 비활성화 해주는것이 좋다.
+    public void OnUpdate(ref SystemState state) {
+        EntityCommandBuffer entityCommandBuffer = new EntityCommandBuffer(Unity.Collections.Allocator.Temp);
+
+        foreach ((
+            RefRO<ReceiveRpcCommandRequest> receiveRpcCommandRequest,
+            Entity entity)
+            in SystemAPI.Query<
+                RefRO<ReceiveRpcCommandRequest>>().WithAll<GoInGameRequestRpc>().WithEntityAccess()) {
+            // receiveRpcCommandRequest.ValueRO.SourceConnection 자체가 Entity이다.
+            // 해당 rpc를 보낸 NetworkId를 포함하고 있다.
+            entityCommandBuffer.AddComponent<NetworkStreamInGame>(receiveRpcCommandRequest.ValueRO.SourceConnection);
+            Debug.Log("Client Connected to Server");
+            entityCommandBuffer.DestroyEntity(entity);
+        }
+        entityCommandBuffer.Playback(state.EntityManager);
+    }
+}
+```
+
+1. any=NetworkStreamConnection를 검색해서
+   1. NetworkConnection의 태그에 Network Stream In Game이 있는지 확인 있다면 ok
+2. 빠른 iteration을 위해서 게임 제작중에는 BurstCompile을 비활성화 해주는것이 좋다.
+3. Jobs > Burst > Enable Compilation을 비활성화까지 해준다.
+   1. 최종 빌드전에 다시 활성화 해준다.
+4. 다시 테스트를해보면 NetworkConnection을 inspector runtime으로보면
+   1. Network Snapshot Ack가 계속 바뀌는것을 확인 할 수 있다.
