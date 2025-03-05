@@ -14,4 +14,5 @@ public class NetcodePlayerInputAuthoring : MonoBehaviour {
 
 public struct NetcodePlayerInput : IInputComponentData {
     public float2 inputVector;
+    public InputEvent shoot; // 기본적으로는 bool이지만 tick이 있음..
 }

@@ -429,3 +429,48 @@ partial struct TestMyValueSystem : ISystem {
                }
    ```
 7. 테스트시 모든 클라이언트의 각각의 MyValue가 바뀌긴한다. (하나만 통제하지는 못했음)
+
+### InputEvent, IsFirstTimeFullyPredictingTick
+
+1. NetcodePlayerInput 에 변수 추가
+   ```cs
+   public struct NetcodePlayerInput : IInputComponentData {
+       public float2 inputVector;
+       public InputEvent shoot;  // 기본적으로는 bool이지만 tick이 있음..
+   }
+   ```
+2. ShootSystem 만들어주기
+
+   ```cs
+   [UpdateInGroup(typeof(PredictedSimulationSystemGroup))]
+
+   partial struct ShootSystem : ISystem {
+
+       [BurstCompile]
+
+       public void OnUpdate(ref SystemState state) {
+
+           NetworkTime networkTime = SystemAPI.GetSingleton<NetworkTime>();
+
+
+
+           foreach (RefRO<NetcodePlayerInput> netcodePlayerInput in SystemAPI.Query<RefRO<NetcodePlayerInput>>().WithAll<Simulate>()) {
+
+               if (networkTime.IsFirstTimeFullyPredictingTick) {
+
+                   if (netcodePlayerInput.ValueRO.shoot.IsSet) {
+
+                       UnityEngine.Debug.Log("Shoot true! " + state.World);
+
+                   }
+
+               }
+
+           }
+
+       }
+
+   }
+   ```
+
+3. edit > Project settings > Multiplayer > Netcode setting을 create 해주고
