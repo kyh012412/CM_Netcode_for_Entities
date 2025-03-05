@@ -14,7 +14,10 @@ partial struct NetcodePlayerInputSystem : ISystem {
 
     // [BurstCompile]
     public void OnUpdate(ref SystemState state) {
-        foreach (RefRW<NetcodePlayerInput> netcodePlayerInput in SystemAPI.Query<RefRW<NetcodePlayerInput>>().WithAll<GhostOwnerIsLocal>()) { // GhostOwnerIsLocal 컴포넌트가 있는 엔티티만 필터링됩니다.
+        foreach (
+            RefRW<NetcodePlayerInput> netcodePlayerInput
+            in SystemAPI.Query<
+                RefRW<NetcodePlayerInput>>().WithAll<GhostOwnerIsLocal>()) { // GhostOwnerIsLocal 컴포넌트가 있는 엔티티만 필터링됩니다.
             float2 inputVector = new float2();
             if (Input.GetKey(KeyCode.W)) {
                 inputVector.y += 1f;

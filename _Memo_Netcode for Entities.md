@@ -354,3 +354,78 @@ public struct NetcodePlayerInput : IInputComponentData {
 3. Server receives Jump input
 4. Makes character Jump
 5. Client receives new Character snapshot Validates that Prediction was correct
+
+### Synchronize Custom Data, GhostField
+
+1. MyValueAuthoring .cs 생성
+
+   ```cs
+   public class MyValueAuthoring : MonoBehaviour {
+       public int value;
+       public class Baker : Baker<MyValueAuthoring> {
+           public override void Bake(MyValueAuthoring authoring) {
+               Entity entity = GetEntity(TransformUsageFlags.Dynamic);
+               AddComponent(entity, new MyValue());
+           }
+       }
+   }
+
+   public struct MyValue : IComponentData {
+       [GhostField] public int value;
+   }
+   ```
+
+2. `IComponentData`와 함께 `[GhostField]`를 사용한다.
+   1. 모든 클라이언트가 동기화가 된다.
+3. 또는 MyValue 위쪽에 `[GhostComponent]`를 적는 방법도 있다.
+4. MyValueAuthoring도 Player에 넣어준다.
+5. NetcodePlayerInputSystem에서 y가 눌렸을때 myvalue에 랜덤 값 부여하는 코드 추가
+   ```cs
+               if (Input.GetKeyDown(KeyCode.Y)) {
+                   myValue.ValueRW.value = UnityEngine.Random.Range(100, 999);
+                   Debug.Log("Changed : " + myValue.ValueRW.value);
+               }
+   ```
+6. TestMyValueSystem .cs 추가
+
+```cs
+partial struct TestMyValueSystem : ISystem {
+    // [BurstCompile]
+    public void OnUpdate(ref SystemState state) {
+        foreach ((
+            RefRO<MyValue> myValue,
+            Entity entity
+            ) in SystemAPI.Query<
+                RefRO<MyValue>>().WithEntityAccess()) {
+            UnityEngine.Debug.Log(myValue.ValueRO.value + " :: " + entity + " :: " + state.World);
+        }
+    }
+}
+```
+
+1. 테스트 결과 값은 한번만 바뀌며 (로그기록상) 다시 원위치된다 이유는
+2. netcode for entities가 server authoritative이기때문이다.
+3. 소스의 원천은 서버에하나이기 때문
+4. NetcodePlayerInputSystem는 GhostInputSystemGroup에 있고 이것은 Client 단에서 입력되는 것이다.
+5. TextMyValueServerSystem이하에 TextMyValueServerSystem를 만들어준다.
+   ```cs
+   [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
+   partial struct TextMyValueServerSystem : ISystem {
+       public void OnUpdate(ref SystemState state) {
+           foreach (RefRW<MyValue> myValue in SystemAPI.Query<RefRW<MyValue>>()) {
+               if (Input.GetKeyDown(KeyCode.Y)) {
+                   myValue.ValueRW.value = UnityEngine.Random.Range(100, 999);
+                   Debug.Log("Changed : " + myValue.ValueRW.value);
+               }
+           }
+       }
+   }
+   ```
+6. NetcodePlayerInputSystem의 다음 부분을 다시 지워준다. (코드의 이동)
+   ```cs
+               if (Input.GetKeyDown(KeyCode.Y)) {
+                   myValue.ValueRW.value = UnityEngine.Random.Range(100, 999);
+                   Debug.Log("Changed : " + myValue.ValueRW.value);
+               }
+   ```
+7. 테스트시 모든 클라이언트의 각각의 MyValue가 바뀌긴한다. (하나만 통제하지는 못했음)
