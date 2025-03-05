@@ -249,3 +249,86 @@ partial struct GoInGameServerSystem : ISystem {
     1. Spawning할때 해당 connection이하에 있는 Linked Entity Group에 Player를 추가하여서 종료시 같이 제거될수있게 해준다.
 18. Player2 에서 tools를 열어주고 Client DC버튼이 (Client disconnect)이다.
 19. 테스트 - 정상
+
+### Player Movement, IInputComponentData
+
+1. 플레이어 이동제어를 위해서 새로운 스크립트 생성
+2. NetcodePlayerInputAuthoring
+
+```cs
+public class NetcodePlayerInputAuthoring : MonoBehaviour {
+    public class Baker : Baker<NetcodePlayerInputAuthoring> {
+        public override void Bake(NetcodePlayerInputAuthoring authoring) {
+            Entity entity = GetEntity(TransformUsageFlags.Dynamic);
+            AddComponent(entity, new NetcodePlayerInput());
+        }
+    }
+}
+
+public struct NetcodePlayerInput : IInputComponentData {
+    public float2 inputVector;
+}
+```
+
+1. `IInputComponentData`사용 Unity.NetCode 이하에 있음
+2. Player Prefab에 부착해준다.
+3. NetcodePlayerInputSystem .cs 를만들어준다.
+
+   ```cs
+   [UpdateInGroup(typeof(GhostInputSystemGroup))]
+   partial struct NetcodePlayerInputSystem : ISystem {
+       // [BurstCompile]
+       public void OnCreate(ref SystemState state) {
+           state.RequireForUpdate<NetworkStreamInGame>();
+           state.RequireForUpdate<NetcodePlayerInput>();
+       }
+
+       // [BurstCompile]
+       public void OnUpdate(ref SystemState state) {
+           foreach (RefRW<NetcodePlayerInput> netcodePlayerInput in SystemAPI.Query<RefRW<NetcodePlayerInput>>().WithAll<GhostOwnerIsLocal>()) { // GhostOwnerIsLocal 컴포넌트가 있는 엔티티만 필터링됩니다.
+               float2 inputVector = new float2();
+               if (Input.GetKey(KeyCode.W)) {
+                   inputVector.y += 1f;
+               }
+               if (Input.GetKey(KeyCode.S)) {
+                   inputVector.y -= 1f;
+               }
+               if (Input.GetKey(KeyCode.A)) {
+                   inputVector.x -= 1f;
+               }
+               if (Input.GetKey(KeyCode.D)) {
+                   inputVector.x += 1f;
+               }
+               netcodePlayerInput.ValueRW.inputVector = inputVector;
+           }
+       }
+   }
+   ```
+
+4. 1. `[UpdateInGroup(typeof(GhostInputSystemGroup))]`사용까지
+      1. 내부를 확인해보면 ClientSimulation인것을 알 수있다.
+5. 제어를 잘못하게되면 한플레이어의 입력이 모든 플레이어를 이동제어해버릴수있다.
+   1. Player내부에 Ghost Owner is Local이 True인 것만 제어하도록 해야한다.
+6. NetcodePlayerMovementSystem 도 만들어준다.
+7. `[UpdateInGroup(typeof(PredictedSimulationSystemGroup))]`를 같이 사용한다.
+
+   ```cs
+   [UpdateInGroup(typeof(PredictedSimulationSystemGroup))]
+   partial struct NetcodePlayerMovementSystem : ISystem {
+       [BurstCompile]
+       public void OnUpdate(ref SystemState state) {
+           foreach ((RefRO<NetcodePlayerInput> netcodePlayerInput,
+           RefRW<LocalTransform> localTransform)
+           in SystemAPI.Query<
+               RefRO<NetcodePlayerInput>,
+               RefRW<LocalTransform>>().WithAll<Simulate>()) {
+
+               float moveSpeed = 10f;
+               float3 moveVector = new float3(netcodePlayerInput.ValueRO.inputVector.x, 0, netcodePlayerInput.ValueRO.inputVector.y);
+               localTransform.ValueRW.Position += moveVector * moveSpeed * SystemAPI.Time.DeltaTime;
+           }
+       }
+   }
+   ```
+
+8. `.WithAll<Simulate>()`를 같이 사용해야 한다.
