@@ -306,7 +306,7 @@ public struct NetcodePlayerInput : IInputComponentData {
    ```
 
 4. 1. `[UpdateInGroup(typeof(GhostInputSystemGroup))]`사용까지
-      1. 내부를 확인해보면 ClientSimulation인것을 알 수있다.
+   1. 내부를 확인해보면 ClientSimulation인것을 알 수있다.
 5. 제어를 잘못하게되면 한플레이어의 입력이 모든 플레이어를 이동제어해버릴수있다.
    1. Player내부에 Ghost Owner is Local이 True인 것만 제어하도록 해야한다.
 6. NetcodePlayerMovementSystem 도 만들어준다.
@@ -332,3 +332,25 @@ public struct NetcodePlayerInput : IInputComponentData {
    ```
 
 8. `.WithAll<Simulate>()`를 같이 사용해야 한다.
+
+### Client Prediction with Lag
+
+#### Netcode - Prediction
+
+##### Without Prediction
+
+1. Client Presses Jump Input
+   1. Local Character does not jump
+2. jump input sent to server
+3. Server receives Jump input
+4. Makes character Jump
+5. Client receives new Character snapshot Jumps
+
+##### With Prediction
+
+1. Client Presses Jump Input
+   1. Local character Jumps instantly
+2. Jump input sent to Server
+3. Server receives Jump input
+4. Makes character Jump
+5. Client receives new Character snapshot Validates that Prediction was correct
