@@ -199,3 +199,53 @@ partial struct GoInGameServerSystem : ISystem {
    1. 최종 빌드전에 다시 활성화 해준다.
 4. 다시 테스트를해보면 NetworkConnection을 inspector runtime으로보면
    1. Network Snapshot Ack가 계속 바뀌는것을 확인 할 수 있다.
+
+### Netcode Ghosts, Player Object
+
+1. 넷코드 내에서 고스트라는 컨셉을 알아야한다.
+2. Netcode - Ghost
+   1. Synchornizes snapshot data across Server and Clients
+   2. Auto Syncs Entity Spawning, Destroying, and LocalTransform
+   3. Custom data must be marked as \[GhostField]
+3. 고스트 만들어보기
+4. 메인 씬이하에 Capsule을 만들어 준다.(Player)
+   1. scale 5, material 재량
+5. PlayerAuthoring을 만들어준다.
+
+   ```cs
+   public class PlayerAuthoring : MonoBehaviour {
+       public class Baker : Baker<PlayerAuthoring> {
+           public override void Bake(PlayerAuthoring authoring) {
+               Entity entity = GetEntity(TransformUsageFlags.Dynamic);
+               AddComponent(entity, new Player());
+           }
+       }
+   }
+
+   public struct Player : IComponentData {
+
+   }
+   ```
+
+6. Player에 Ghost Authoring Component를 붙여준다.
+7. Player를 Prefab화 해준다.
+   1. 씬에서는 제거
+8. Ghost Authoring Component 내에서 Has Owner를 체크해준다.
+   1. 각각의 오브젝트가 각각의 플레이어에게 귀속되기를 원하므로 체크
+   2. 만약에 체크하지 않으면 서버에 귀속되게 되며
+   3. 이 방식은 NPC를 만들때 유용하다.
+   4. Default Ghost Mode는 Owner Predicted로 해준다.
+9. 이제 테스트할때 Player를 동적으로 생성해주면된다.
+10. 이제 엔티티로 만들어주기위하여 참조할수있어야한다.
+11. EntitiesReferenceAuthoring를 만들어준다.
+12. GoInGameServerSystem수정
+    1. Player생성하는 코드 추가
+13. GoInGameClientSystem 수정
+    1. OnCreate단에 RequireForUpdate 추가
+14. 에디터에서 EntitiesReference를 만들어주고 cs붙여주고 prefab을 연결해준다.
+15. 테스트 - 정상
+16. Spawning Object하고나서 disconnect시 cleanup도 같이 해야한다.
+17. 각각의 NetworkConnection마다 Linked Entity Group이 있다.
+    1. Spawning할때 해당 connection이하에 있는 Linked Entity Group에 Player를 추가하여서 종료시 같이 제거될수있게 해준다.
+18. Player2 에서 tools를 열어주고 Client DC버튼이 (Client disconnect)이다.
+19. 테스트 - 정상
